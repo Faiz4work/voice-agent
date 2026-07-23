@@ -1,5 +1,21 @@
 # RUNBOOK — Challenge night (9 PM)
 
+## How the reviewer tests it (deliverable)
+Provide BOTH:
+1. **Web call link (primary)** — Vapi assistant → share/embed link. Free,
+   works globally, no dialing. Best for a reviewer outside the US.
+2. **Twilio phone number (secondary)** — real +1 number, see setup below.
+
+### Twilio number setup (one-time)
+1. Sign up: https://www.twilio.com/try-twilio (free ~$15 trial credit).
+2. Console dashboard → copy **Account SID** (AC…) + **Auth Token**.
+3. Phone Numbers → Manage → Buy a number (US, Voice-capable) — free on trial.
+4. Vapi → Create Phone Number → **Import Twilio** → paste number (E.164
+   `+1…`), Account SID, Auth Token → Import.
+- Trial caveat: inbound calls play a short "trial" notice (upgrade ~$20 to
+  remove). International callers pay their own rates — hence web link is primary.
+- Vapi "Free Vapi SIP" is NOT a dialable phone number — ignore it.
+
 ## Layout of what talks to what
 ```
 Caller ─phone─▶ Vapi ─┬─▶ POST <BASE>/chat/completions   (custom LLM → GPT-4o-mini)

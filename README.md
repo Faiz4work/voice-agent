@@ -47,16 +47,3 @@ ngrok http 8000
 # put https://xxxx.ngrok.app/webhook into the Vapi assistant's Server URL
 ```
 
-## Deploy (Railway)
-1. Push this repo to GitHub.
-2. Railway → New Project → Deploy from GitHub repo.
-3. Add env vars (`SUPABASE_URL`, `SUPABASE_KEY`, etc.) in Railway → Variables.
-4. Copy the public URL → set it (+`/webhook`) as the Vapi Server URL.
-5. Verify: open `https://<railway-url>/health` → `{"status":"ok"}`.
-
-## At 9 PM — the ~20% that's left
-1. Paste the real scenario into the system prompt (`vapi_assistant.json`).
-2. Write the 1–3 tools they ask for in `tools.py` + register them.
-3. Add matching tool schemas to the assistant config.
-4. `git push` → Railway auto-deploys.
-5. Call the Vapi number and test.

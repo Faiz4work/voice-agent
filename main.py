@@ -13,7 +13,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from db import log_call_event, save_record
 from llm import router as llm_router
@@ -28,6 +28,33 @@ app = FastAPI(title="Voice AI Agent")
 
 # Custom-LLM endpoint (/chat/completions) — Vapi calls this as its model.
 app.include_router(llm_router)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root() -> str:
+    """Simple status page so the base URL isn't a bare 404."""
+    return """<!doctype html>
+<html><head><meta charset="utf-8"><title>CareCloud Voice Agent</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#0b0f14;color:#e6edf3;
+       display:flex;min-height:100vh;margin:0;align-items:center;justify-content:center}
+  .card{max-width:520px;padding:2.5rem;border:1px solid #1f2933;border-radius:14px;
+        background:#0f151c}
+  h1{margin:0 0 .25rem;font-size:1.4rem}
+  .dot{color:#3fb950}
+  code{background:#161b22;padding:.15rem .4rem;border-radius:5px;color:#79c0ff}
+  ul{line-height:1.9;padding-left:1.1rem} .muted{color:#8b949e;font-size:.9rem}
+</style></head>
+<body><div class="card">
+  <h1>CareCloud Voice Agent <span class="dot">&#9679; live</span></h1>
+  <p class="muted">Backend for a Vapi-powered voice AI agent. This is an API,
+  not a web app &mdash; interact by <b>calling the agent</b>.</p>
+  <ul>
+    <li><code>GET /health</code> &mdash; liveness check</li>
+    <li><code>POST /chat/completions</code> &mdash; custom LLM (GPT-4o-mini)</li>
+    <li><code>POST /webhook</code> &mdash; tool calls &amp; call logging</li>
+  </ul>
+</div></body></html>"""
 
 
 @app.get("/health")

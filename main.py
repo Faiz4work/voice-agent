@@ -103,13 +103,12 @@ async def root() -> str:
   ul{line-height:1.9;padding-left:1.1rem} .muted{color:#8b949e;font-size:.9rem}
 </style></head>
 <body><div class="card">
-  <h1>CareCloud Voice Agent <span class="dot">&#9679; live</span></h1>
-  <p class="muted">Backend for a Vapi-powered voice AI agent. This is an API,
-  not a web app &mdash; interact by <b>calling the agent</b>.</p>
+  <h1>CareCloud Patient Registration <span class="dot">&#9679; live</span></h1>
+  <p class="muted">Voice AI agent for patient intake. Call
+  <b>+1 (262) 360-4601</b> to register, or browse the records below.</p>
   <ul>
-    <li><code>GET /health</code> &mdash; liveness check</li>
     <li><a href="/dashboard">/dashboard</a> &mdash; patient records (web UI)</li>
-    <li><code>GET /patients</code> &mdash; JSON API (also PUT/POST/DELETE)</li>
+    <li><code>GET /patients</code> &mdash; JSON API (also POST/PUT/DELETE)</li>
     <li><a href="/docs">/docs</a> &mdash; interactive API documentation</li>
     <li><code>GET /health</code> &mdash; liveness check</li>
     <li><code>POST /webhook</code> &mdash; Vapi tool calls &amp; call logging</li>

@@ -1,11 +1,14 @@
 """
-Voice AI Agent — FastAPI backend for Vapi webhooks & tool calls.
+Voice AI Agent — Patient Registration System.
 
-This is the REUSABLE SKELETON. It handles everything that is the same for
-every voice-agent task: the Vapi server URL webhook, tool-call routing,
-call logging, and health checks.
+FastAPI backend serving three concerns, deliberately separated:
+  * /patients/*         — REST API over the patient records (api.py)
+  * /webhook            — Vapi tool calls + call event logging (this file)
+  * /chat/completions   — optional custom-LLM proxy (llm.py)
 
-At challenge start time you only touch the areas marked  # TASK-SPECIFIC.
+The voice agent and the REST API share ONE service layer (crud.py) and ONE
+validation layer (schemas.py), so a patient registered by phone is validated
+identically to one created over HTTP.
 """
 import logging
 import os
@@ -13,21 +16,72 @@ from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from db import log_call_event, save_record
+from api import router as patients_router
 from llm import router as llm_router
+from models import init_db
 from tools import TOOL_REGISTRY
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 log = logging.getLogger("voice-agent")
 
-app = FastAPI(title="Voice AI Agent")
+app = FastAPI(
+    title="Voice AI Agent — Patient Registration",
+    description="Conversational patient intake over the phone, backed by a REST API.",
+    version="1.0.0",
+)
 
-# Custom-LLM endpoint (/chat/completions) — Vapi calls this as its model.
+# Create tables on boot (idempotent).
+init_db()
+
+app.include_router(patients_router)
+# Custom-LLM endpoint (/chat/completions) — used only if Vapi is configured
+# with provider "custom-llm"; harmless otherwise.
 app.include_router(llm_router)
+
+
+# --- Consistent error envelope: {"data": null, "error": {...}} -------------
+@app.exception_handler(StarletteHTTPException)
+async def http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"data": None, "error": {"message": exc.detail}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """422 with field-level detail — the API validates independently of the agent."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "data": None,
+            "error": {
+                "message": "Validation failed",
+                "fields": [
+                    {"field": ".".join(str(p) for p in e["loc"][1:]), "reason": e["msg"]}
+                    for e in exc.errors()
+                ],
+            },
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error(_: Request, exc: Exception) -> JSONResponse:
+    log.exception("Unhandled error")
+    return JSONResponse(
+        status_code=500,
+        content={"data": None, "error": {"message": "Internal server error"}},
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -82,22 +136,16 @@ async def vapi_webhook(request: Request) -> JSONResponse:
     if msg_type in ("tool-calls", "function-call"):
         return JSONResponse(await handle_tool_calls(message))
 
-    # --- Everything else: just log it ------------------------------------
+    # --- Observability: log the conversation outcome ---------------------
     if msg_type == "end-of-call-report":
-        # Persist the full call summary — great to show the reviewer.
-        call = message.get("call", {})
-        save_record(
-            "calls",
-            {
-                "call_id": call.get("id"),
-                "phone_number": (message.get("customer") or {}).get("number"),
-                "summary": message.get("summary"),
-                "transcript": message.get("transcript"),
-                "ended_reason": message.get("endedReason"),
-            },
+        log.info(
+            "CALL ENDED | id=%s from=%s reason=%s\nSUMMARY: %s\nTRANSCRIPT:\n%s",
+            (message.get("call") or {}).get("id"),
+            (message.get("customer") or {}).get("number"),
+            message.get("endedReason"),
+            message.get("summary"),
+            message.get("transcript"),
         )
-    else:
-        log_call_event(msg_type, message)
 
     return JSONResponse({"received": True})
 

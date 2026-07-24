@@ -1,47 +1,117 @@
 {
-  "_comment": "Vapi assistant config template. model.provider is 'custom-llm' so Vapi calls YOUR backend at model.url + '/chat/completions'. Set model.url to your Railway base URL (no path). Set server.url (below) to the same base + '/webhook' for tool execution + event logging.",
-  "name": "CareCloud Voice Agent",
-  "firstMessage": "Hello! Thank you for calling. How can I help you today?",
-  "_llm_note": "Using Vapi's BUILT-IN OpenAI (billed from Vapi credits, no OpenAI account needed). OPTIONAL UPGRADE: to run the LLM through your own backend, change provider to 'custom-llm' and add \"url\": \"https://<railway-domain>\" — then you must set OPENAI_API_KEY in Railway.",
+  "_comment": "Vapi assistant config for the Patient Registration agent. System prompt lives in prompt.md (paste it into model.messages[0].content). Set server.url to <RAILWAY_BASE>/webhook so tool calls reach the backend.",
+  "name": "CareCloud Patient Registration",
+  "firstMessage": "Thanks for calling CareCloud Medical, this is Riley. I can get you registered as a new patient — can I start with your first and last name?",
+  "endCallFunctionEnabled": true,
+  "silenceTimeoutSeconds": 30,
+  "maxDurationSeconds": 900,
+  "backgroundSound": "office",
   "model": {
     "provider": "openai",
     "model": "gpt-4o-mini",
-    "temperature": 0.4,
+    "temperature": 0.5,
     "messages": [
       {
         "role": "system",
-        "content": "You are a professional, friendly voice assistant for CareCloud. Keep replies short and natural for speech. Confirm details before taking any action. ===== TASK-SPECIFIC: paste the real scenario, rules, and persona here at 9 PM ====="
+        "content": "PASTE THE SYSTEM PROMPT FROM prompt.md HERE"
       }
     ],
     "tools": [
       {
         "type": "function",
         "function": {
-          "name": "book_appointment",
-          "description": "EXAMPLE. Book an appointment for a patient.",
+          "name": "register_patient",
+          "description": "Save a NEW patient after the caller has confirmed the read-back. Only call once the caller says the details are correct.",
           "parameters": {
             "type": "object",
             "properties": {
-              "name": { "type": "string", "description": "Patient full name" },
-              "date": { "type": "string", "description": "Date, e.g. 2026-07-25" },
-              "time": { "type": "string", "description": "Time, e.g. 3:00 PM" }
+              "first_name": { "type": "string", "description": "Legal first name" },
+              "last_name": { "type": "string", "description": "Legal last name" },
+              "date_of_birth": { "type": "string", "description": "MM/DD/YYYY" },
+              "sex": {
+                "type": "string",
+                "enum": ["Male", "Female", "Other", "Decline to Answer"]
+              },
+              "phone_number": { "type": "string", "description": "10-digit US number" },
+              "address_line_1": { "type": "string", "description": "Street address" },
+              "address_line_2": { "type": "string", "description": "Apt/Suite, optional" },
+              "city": { "type": "string" },
+              "state": { "type": "string", "description": "2-letter state code, e.g. CA" },
+              "zip_code": { "type": "string", "description": "5-digit or ZIP+4" },
+              "email": { "type": "string", "description": "Optional" },
+              "insurance_provider": { "type": "string", "description": "Optional" },
+              "insurance_member_id": { "type": "string", "description": "Optional" },
+              "preferred_language": { "type": "string", "description": "Optional, default English" },
+              "emergency_contact_name": { "type": "string", "description": "Optional" },
+              "emergency_contact_phone": { "type": "string", "description": "Optional, 10 digits" }
             },
-            "required": ["name", "date", "time"]
+            "required": [
+              "first_name", "last_name", "date_of_birth", "sex", "phone_number",
+              "address_line_1", "city", "state", "zip_code"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "lookup_patient",
+          "description": "Check whether a patient already exists for this phone number. Call after collecting the phone number to detect returning callers.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "phone_number": { "type": "string", "description": "10-digit US number" }
+            },
+            "required": ["phone_number"]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "update_patient",
+          "description": "Update an existing patient record. Use the patient_id returned by lookup_patient or a DUPLICATE result. Only include fields being changed.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "patient_id": { "type": "string", "description": "UUID of the existing patient" },
+              "first_name": { "type": "string" },
+              "last_name": { "type": "string" },
+              "date_of_birth": { "type": "string", "description": "MM/DD/YYYY" },
+              "sex": {
+                "type": "string",
+                "enum": ["Male", "Female", "Other", "Decline to Answer"]
+              },
+              "phone_number": { "type": "string" },
+              "address_line_1": { "type": "string" },
+              "address_line_2": { "type": "string" },
+              "city": { "type": "string" },
+              "state": { "type": "string" },
+              "zip_code": { "type": "string" },
+              "email": { "type": "string" },
+              "insurance_provider": { "type": "string" },
+              "insurance_member_id": { "type": "string" },
+              "preferred_language": { "type": "string" },
+              "emergency_contact_name": { "type": "string" },
+              "emergency_contact_phone": { "type": "string" }
+            },
+            "required": ["patient_id"]
           }
         }
       }
     ]
   },
   "voice": {
-    "provider": "11labs",
-    "voiceId": "burt"
+    "provider": "vapi",
+    "voiceId": "Elliot"
   },
   "transcriber": {
     "provider": "deepgram",
     "model": "nova-2",
-    "language": "en"
+    "language": "en",
+    "numerals": true
   },
   "server": {
-    "url": "https://YOUR-RAILWAY-URL.up.railway.app/webhook"
+    "url": "https://voice-agent-production-23aa.up.railway.app/webhook"
   }
 }

@@ -26,7 +26,7 @@ SERVER_URL = os.getenv(
 API = f"https://api.vapi.ai/assistant/{ASSISTANT_ID}"
 
 FIRST_MESSAGE = (
-    "Thanks for calling CareCloud Medical, this is Riley. I can get you "
+    "Thanks for calling CareCloud Medical, this is Savannah. I can get you "
     "registered as a new patient — can I start with your first and last name?"
 )
 
@@ -52,7 +52,7 @@ def main() -> None:
         sys.exit("Set VAPI_API_KEY first (Vapi dashboard > Settings > API Keys).")
 
     payload = {
-        "name": "Riley — CareCloud Patient Registration",
+        "name": "Savannah — CareCloud Patient Registration",
         "firstMessage": FIRST_MESSAGE,
         "model": {
             "provider": "openai",

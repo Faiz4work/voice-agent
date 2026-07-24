@@ -1,7 +1,7 @@
 {
   "_comment": "Vapi assistant config for the Patient Registration agent. System prompt lives in prompt.md (paste it into model.messages[0].content). Set server.url to <RAILWAY_BASE>/webhook so tool calls reach the backend.",
   "name": "CareCloud Patient Registration",
-  "firstMessage": "Thanks for calling CareCloud Medical, this is Riley. I can get you registered as a new patient — can I start with your first and last name?",
+  "firstMessage": "Thanks for calling CareCloud Medical, this is Savannah. I can get you registered as a new patient — can I start with your first and last name?",
   "endCallFunctionEnabled": true,
   "silenceTimeoutSeconds": 30,
   "maxDurationSeconds": 900,

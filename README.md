@@ -9,7 +9,7 @@ REST API.
 
 | | |
 |---|---|
-| **Phone number** | `<TWILIO_NUMBER>` — call to register a patient |
+| **Phone number** | **+1 (262) 360-4601** — call to register a patient |
 | **API base URL** | https://voice-agent-production-23aa.up.railway.app |
 | **Status page** | https://voice-agent-production-23aa.up.railway.app/ |
 | **Interactive API docs** | https://voice-agent-production-23aa.up.railway.app/docs |

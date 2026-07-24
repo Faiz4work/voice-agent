@@ -14,18 +14,35 @@ log = logging.getLogger("voice-agent.db")
 _client = None
 
 
+_client_failed = False
+
+
 def _get_client():
-    global _client
+    """Return a Supabase client, or None if unconfigured/unusable.
+
+    Never raises: a bad key must degrade to a no-op, not break a live call.
+    """
+    global _client, _client_failed
     if _client is not None:
         return _client
+    if _client_failed:
+        return None
+
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
-    if not url or not key:
+    if not url or not key or url.startswith("https://xxxx"):
         log.warning("Supabase not configured — DB calls are no-ops.")
+        _client_failed = True
         return None
-    from supabase import create_client
 
-    _client = create_client(url, key)
+    try:
+        from supabase import create_client
+
+        _client = create_client(url, key)
+    except Exception:  # noqa: BLE001 - bad creds must not break a call
+        log.exception("Supabase client init failed — DB calls are no-ops.")
+        _client_failed = True
+        return None
     return _client
 
 

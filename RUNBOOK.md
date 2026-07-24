@@ -16,15 +16,23 @@ Provide BOTH:
   remove). International callers pay their own rates — hence web link is primary.
 - Vapi "Free Vapi SIP" is NOT a dialable phone number — ignore it.
 
-## Layout of what talks to what
+## Layout of what talks to what (CURRENT SETUP)
 ```
-Caller ─phone─▶ Vapi ─┬─▶ POST <BASE>/chat/completions   (custom LLM → GPT-4o-mini)
-                      └─▶ POST <BASE>/webhook            (tool exec + event logs)
-<BASE> = your Railway URL  OR  your ngrok URL
+Caller ─phone─▶ Vapi ──(built-in GPT-4o-mini, billed from Vapi credits)
+                 └────▶ POST <BASE>/webhook   (tool exec + event logs → Supabase)
+<BASE> = https://voice-agent-production-23aa.up.railway.app   (or ngrok URL)
 ```
-Set BOTH in the Vapi assistant:
-- `model.url`  = `<BASE>`            (no path — Vapi appends /chat/completions)
-- `server.url` = `<BASE>/webhook`
+Set in the Vapi assistant:
+- **Server URL** = `<BASE>/webhook`   ← the only one required
+- No OpenAI account needed. LLM cost comes out of Vapi credits.
+
+### OPTIONAL upgrade — run the LLM through your own backend
+Only if time allows AND you've loaded ~$5 OpenAI credit:
+1. Set `OPENAI_API_KEY` in Railway → Variables.
+2. Vapi assistant → Model → provider **Custom LLM**, URL = `<BASE>`
+   (no path — Vapi appends `/chat/completions`; already implemented in `llm.py`).
+3. Test a call. If latency/errors appear, switch the provider back to
+   built-in OpenAI — that's the safe fallback.
 
 ---
 

@@ -70,7 +70,7 @@ def main() -> None:
         },
         "server": {"url": f"{SERVER_URL}/webhook"},
         "serverMessages": ["tool-calls", "end-of-call-report", "status-update"],
-        "silenceTimeoutSeconds": 30,
+        "silenceTimeoutSeconds": 20,
         "maxDurationSeconds": 900,
         "endCallFunctionEnabled": True,
     }

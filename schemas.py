@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 US_STATES = {
     "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
@@ -55,7 +55,25 @@ def normalize_dob(v: Any) -> str:
     return d.isoformat()
 
 
+def blank_to_none(data: Any) -> Any:
+    """Treat "", "  ", "none", "n/a" as an omitted field.
+
+    LLMs routinely emit empty strings for optional arguments the caller
+    declined, and an empty string must not fail validation as if the caller
+    had given a bad value.
+    """
+    if not isinstance(data, dict):
+        return data
+    skip = {"", "none", "n/a", "na", "null", "not provided", "unknown"}
+    return {
+        k: (None if isinstance(v, str) and v.strip().lower() in skip else v)
+        for k, v in data.items()
+    }
+
+
 class PatientBase(BaseModel):
+    _strip_blanks = model_validator(mode="before")(blank_to_none)
+
     first_name: Annotated[str, Field(min_length=1, max_length=50)]
     last_name: Annotated[str, Field(min_length=1, max_length=50)]
     date_of_birth: str
@@ -116,6 +134,8 @@ class PatientCreate(PatientBase):
 
 class PatientUpdate(BaseModel):
     """Partial update — every field optional, same rules when present."""
+
+    _strip_blanks = model_validator(mode="before")(blank_to_none)
 
     first_name: str | None = None
     last_name: str | None = None

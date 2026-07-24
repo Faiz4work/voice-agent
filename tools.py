@@ -30,16 +30,30 @@ FIELD_LABELS = {
     "emergency_contact_phone": "emergency contact phone",
 }
 
+# Spoken guidance per field. The raw validator messages mention digit counts,
+# which the model then reads aloud and gets wrong — so phone/ZIP get generic
+# wording instead.
+SPOKEN_REASONS = {
+    "phone_number": "ask them to say the number again slowly, area code first",
+    "emergency_contact_phone": "ask for the emergency contact number again",
+    "zip_code": "ask them to read the ZIP code digit by digit",
+}
+
 
 def _speak_validation_error(exc: ValidationError) -> str:
     """Turn pydantic errors into one short sentence the agent can re-prompt with."""
     problems = []
     for err in exc.errors():
-        field = err["loc"][0] if err["loc"] else "field"
-        label = FIELD_LABELS.get(str(field), str(field).replace("_", " "))
-        msg = err.get("msg", "").replace("Value error, ", "")
-        problems.append(f"{label}: {msg}")
-    return "INVALID — please re-ask the caller for " + "; ".join(problems)
+        field = str(err["loc"][0]) if err["loc"] else "field"
+        label = FIELD_LABELS.get(field, field.replace("_", " "))
+        reason = SPOKEN_REASONS.get(field) or err.get("msg", "").replace(
+            "Value error, ", ""
+        )
+        problems.append(f"{label} — {reason}")
+    return (
+        "INVALID — re-ask only these, and do not mention digit counts: "
+        + "; ".join(problems)
+    )
 
 
 def register_patient(args: dict[str, Any]) -> str:
@@ -78,10 +92,16 @@ def register_patient(args: dict[str, Any]) -> str:
 
 def lookup_patient(args: dict[str, Any]) -> str:
     """Find an existing patient by phone number (duplicate detection)."""
+    raw = args.get("phone_number", "")
     try:
-        phone = normalize_phone(args.get("phone_number", ""))
-    except ValueError as exc:
-        return f"INVALID — {exc}. Ask the caller to repeat their phone number."
+        phone = normalize_phone(raw)
+    except ValueError:
+        # Never report a digit count back to the model — it will repeat it
+        # aloud and it is unreliable at counting. Keep the guidance generic.
+        return (
+            "INVALID — that is not a usable US phone number. Ask the caller to "
+            "say it again slowly, area code first, then read it back to them."
+        )
 
     db = SessionLocal()
     try:

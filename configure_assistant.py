@@ -52,7 +52,7 @@ def main() -> None:
         sys.exit("Set VAPI_API_KEY first (Vapi dashboard > Settings > API Keys).")
 
     payload = {
-        "name": "Savannah — CareCloud Patient Registration",
+        "name": "Savannah — Patient Registration",
         "firstMessage": FIRST_MESSAGE,
         "model": {
             "provider": "openai",

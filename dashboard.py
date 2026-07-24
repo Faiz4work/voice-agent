@@ -26,8 +26,8 @@ PAGE = """<!doctype html>
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);
-     font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;padding:2rem 1.25rem}
-.wrap{max-width:1200px;margin:0 auto}
+     font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;padding:2rem 1.5rem}
+.wrap{max-width:min(1800px,98vw);margin:0 auto}
 header{display:flex;flex-wrap:wrap;gap:.75rem;align-items:baseline;
        justify-content:space-between;margin-bottom:.35rem}
 h1{font-size:1.5rem;margin:0}
@@ -48,6 +48,11 @@ th,td{padding:.65rem .75rem;text-align:left;border-bottom:1px solid var(--line);
       white-space:nowrap}
 th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;
    color:var(--muted);position:sticky;top:0;background:var(--panel)}
+/* Keep the row actions reachable when the table scrolls horizontally. */
+th:last-child,td:last-child{position:sticky;right:0;background:var(--panel);
+  text-align:right;box-shadow:-6px 0 8px -6px rgba(0,0,0,.45)}
+tbody tr:hover td:last-child{background:var(--panel)}
+td:last-child button{white-space:nowrap}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:rgba(127,127,127,.07)}
 tr.deleted{opacity:.45;text-decoration:line-through}

@@ -17,11 +17,12 @@ from typing import Any
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import router as patients_router
 from dashboard import router as dashboard_router
+from landing import router as landing_router
 from llm import router as llm_router
 from models import init_db
 from tools import TOOL_REGISTRY
@@ -43,6 +44,7 @@ app = FastAPI(
 # Create tables on boot (idempotent).
 init_db()
 
+app.include_router(landing_router)
 app.include_router(patients_router)
 # Bonus: HTML dashboard at /dashboard. Kept separate so /patients stays pure JSON.
 app.include_router(dashboard_router)
@@ -85,35 +87,6 @@ async def unhandled_error(_: Request, exc: Exception) -> JSONResponse:
         status_code=500,
         content={"data": None, "error": {"message": "Internal server error"}},
     )
-
-
-@app.get("/", response_class=HTMLResponse)
-async def root() -> str:
-    """Simple status page so the base URL isn't a bare 404."""
-    return """<!doctype html>
-<html><head><meta charset="utf-8"><title>CareCloud Voice Agent</title>
-<style>
-  body{font-family:system-ui,sans-serif;background:#0b0f14;color:#e6edf3;
-       display:flex;min-height:100vh;margin:0;align-items:center;justify-content:center}
-  .card{max-width:520px;padding:2.5rem;border:1px solid #1f2933;border-radius:14px;
-        background:#0f151c}
-  h1{margin:0 0 .25rem;font-size:1.4rem}
-  .dot{color:#3fb950}
-  code{background:#161b22;padding:.15rem .4rem;border-radius:5px;color:#79c0ff}
-  ul{line-height:1.9;padding-left:1.1rem} .muted{color:#8b949e;font-size:.9rem}
-</style></head>
-<body><div class="card">
-  <h1>CareCloud Patient Registration <span class="dot">&#9679; live</span></h1>
-  <p class="muted">Voice AI agent for patient intake. Call
-  <b>+1 (262) 360-4601</b> to register, or browse the records below.</p>
-  <ul>
-    <li><a href="/dashboard">/dashboard</a> &mdash; patient records (web UI)</li>
-    <li><code>GET /patients</code> &mdash; JSON API (also POST/PUT/DELETE)</li>
-    <li><a href="/docs">/docs</a> &mdash; interactive API documentation</li>
-    <li><code>GET /health</code> &mdash; liveness check</li>
-    <li><code>POST /webhook</code> &mdash; Vapi tool calls &amp; call logging</li>
-  </ul>
-</div></body></html>"""
 
 
 @app.get("/health")

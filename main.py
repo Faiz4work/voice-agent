@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import router as patients_router
+from dashboard import router as dashboard_router
 from llm import router as llm_router
 from models import init_db
 from tools import TOOL_REGISTRY
@@ -43,6 +44,8 @@ app = FastAPI(
 init_db()
 
 app.include_router(patients_router)
+# Bonus: HTML dashboard at /dashboard. Kept separate so /patients stays pure JSON.
+app.include_router(dashboard_router)
 # Custom-LLM endpoint (/chat/completions) — used only if Vapi is configured
 # with provider "custom-llm"; harmless otherwise.
 app.include_router(llm_router)
@@ -105,8 +108,11 @@ async def root() -> str:
   not a web app &mdash; interact by <b>calling the agent</b>.</p>
   <ul>
     <li><code>GET /health</code> &mdash; liveness check</li>
-    <li><code>POST /chat/completions</code> &mdash; custom LLM (GPT-4o-mini)</li>
-    <li><code>POST /webhook</code> &mdash; tool calls &amp; call logging</li>
+    <li><a href="/dashboard">/dashboard</a> &mdash; patient records (web UI)</li>
+    <li><code>GET /patients</code> &mdash; JSON API (also PUT/POST/DELETE)</li>
+    <li><a href="/docs">/docs</a> &mdash; interactive API documentation</li>
+    <li><code>GET /health</code> &mdash; liveness check</li>
+    <li><code>POST /webhook</code> &mdash; Vapi tool calls &amp; call logging</li>
   </ul>
 </div></body></html>"""
 

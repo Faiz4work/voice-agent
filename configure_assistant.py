@@ -61,7 +61,7 @@ def main() -> None:
             "messages": [{"role": "system", "content": load_system_prompt()}],
             "tools": load_tools(),
         },
-        "voice": {"provider": "vapi", "voiceId": "Elliot"},
+        "voice": {"provider": "vapi", "voiceId": "Savannah"},
         "transcriber": {
             "provider": "deepgram",
             "model": "nova-2",

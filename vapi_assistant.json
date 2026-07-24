@@ -1,9 +1,9 @@
 {
   "_comment": "Vapi assistant config for the Patient Registration agent. System prompt lives in prompt.md (paste it into model.messages[0].content). Set server.url to <RAILWAY_BASE>/webhook so tool calls reach the backend.",
-  "name": "CareCloud Patient Registration",
+  "name": "Savannah — CareCloud Patient Registration",
   "firstMessage": "Thanks for calling CareCloud Medical, this is Savannah. I can get you registered as a new patient — can I start with your first and last name?",
   "endCallFunctionEnabled": true,
-  "silenceTimeoutSeconds": 30,
+  "silenceTimeoutSeconds": 20,
   "maxDurationSeconds": 900,
   "backgroundSound": "office",
   "model": {
@@ -25,29 +25,85 @@
           "parameters": {
             "type": "object",
             "properties": {
-              "first_name": { "type": "string", "description": "Legal first name" },
-              "last_name": { "type": "string", "description": "Legal last name" },
-              "date_of_birth": { "type": "string", "description": "MM/DD/YYYY" },
+              "first_name": {
+                "type": "string",
+                "description": "Legal first name"
+              },
+              "last_name": {
+                "type": "string",
+                "description": "Legal last name"
+              },
+              "date_of_birth": {
+                "type": "string",
+                "description": "MM/DD/YYYY"
+              },
               "sex": {
                 "type": "string",
-                "enum": ["Male", "Female", "Other", "Decline to Answer"]
+                "enum": [
+                  "Male",
+                  "Female",
+                  "Other",
+                  "Decline to Answer"
+                ]
               },
-              "phone_number": { "type": "string", "description": "10-digit US number" },
-              "address_line_1": { "type": "string", "description": "Street address" },
-              "address_line_2": { "type": "string", "description": "Apt/Suite, optional" },
-              "city": { "type": "string" },
-              "state": { "type": "string", "description": "2-letter state code, e.g. CA" },
-              "zip_code": { "type": "string", "description": "5-digit or ZIP+4" },
-              "email": { "type": "string", "description": "Optional" },
-              "insurance_provider": { "type": "string", "description": "Optional" },
-              "insurance_member_id": { "type": "string", "description": "Optional" },
-              "preferred_language": { "type": "string", "description": "Optional, default English" },
-              "emergency_contact_name": { "type": "string", "description": "Optional" },
-              "emergency_contact_phone": { "type": "string", "description": "Optional, 10 digits" }
+              "phone_number": {
+                "type": "string",
+                "description": "10-digit US number"
+              },
+              "address_line_1": {
+                "type": "string",
+                "description": "Street address"
+              },
+              "address_line_2": {
+                "type": "string",
+                "description": "Apt/Suite, optional"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "description": "2-letter state code, e.g. CA"
+              },
+              "zip_code": {
+                "type": "string",
+                "description": "5-digit or ZIP+4"
+              },
+              "email": {
+                "type": "string",
+                "description": "Optional"
+              },
+              "insurance_provider": {
+                "type": "string",
+                "description": "Optional"
+              },
+              "insurance_member_id": {
+                "type": "string",
+                "description": "Optional"
+              },
+              "preferred_language": {
+                "type": "string",
+                "description": "Optional, default English"
+              },
+              "emergency_contact_name": {
+                "type": "string",
+                "description": "Optional"
+              },
+              "emergency_contact_phone": {
+                "type": "string",
+                "description": "Optional, 10 digits"
+              }
             },
             "required": [
-              "first_name", "last_name", "date_of_birth", "sex", "phone_number",
-              "address_line_1", "city", "state", "zip_code"
+              "first_name",
+              "last_name",
+              "date_of_birth",
+              "sex",
+              "phone_number",
+              "address_line_1",
+              "city",
+              "state",
+              "zip_code"
             ]
           }
         }
@@ -60,9 +116,14 @@
           "parameters": {
             "type": "object",
             "properties": {
-              "phone_number": { "type": "string", "description": "10-digit US number" }
+              "phone_number": {
+                "type": "string",
+                "description": "10-digit US number"
+              }
             },
-            "required": ["phone_number"]
+            "required": [
+              "phone_number"
+            ]
           }
         }
       },
@@ -74,28 +135,69 @@
           "parameters": {
             "type": "object",
             "properties": {
-              "patient_id": { "type": "string", "description": "UUID of the existing patient" },
-              "first_name": { "type": "string" },
-              "last_name": { "type": "string" },
-              "date_of_birth": { "type": "string", "description": "MM/DD/YYYY" },
+              "patient_id": {
+                "type": "string",
+                "description": "UUID of the existing patient"
+              },
+              "first_name": {
+                "type": "string"
+              },
+              "last_name": {
+                "type": "string"
+              },
+              "date_of_birth": {
+                "type": "string",
+                "description": "MM/DD/YYYY"
+              },
               "sex": {
                 "type": "string",
-                "enum": ["Male", "Female", "Other", "Decline to Answer"]
+                "enum": [
+                  "Male",
+                  "Female",
+                  "Other",
+                  "Decline to Answer"
+                ]
               },
-              "phone_number": { "type": "string" },
-              "address_line_1": { "type": "string" },
-              "address_line_2": { "type": "string" },
-              "city": { "type": "string" },
-              "state": { "type": "string" },
-              "zip_code": { "type": "string" },
-              "email": { "type": "string" },
-              "insurance_provider": { "type": "string" },
-              "insurance_member_id": { "type": "string" },
-              "preferred_language": { "type": "string" },
-              "emergency_contact_name": { "type": "string" },
-              "emergency_contact_phone": { "type": "string" }
+              "phone_number": {
+                "type": "string"
+              },
+              "address_line_1": {
+                "type": "string"
+              },
+              "address_line_2": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "zip_code": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "insurance_provider": {
+                "type": "string"
+              },
+              "insurance_member_id": {
+                "type": "string"
+              },
+              "preferred_language": {
+                "type": "string"
+              },
+              "emergency_contact_name": {
+                "type": "string"
+              },
+              "emergency_contact_phone": {
+                "type": "string"
+              }
             },
-            "required": ["patient_id"]
+            "required": [
+              "patient_id"
+            ]
           }
         }
       }
@@ -103,7 +205,7 @@
   },
   "voice": {
     "provider": "vapi",
-    "voiceId": "Elliot"
+    "voiceId": "Savannah"
   },
   "transcriber": {
     "provider": "deepgram",

@@ -3,7 +3,7 @@
   "name": "Savannah — Patient Registration",
   "firstMessage": "Thanks for calling CareCloud Medical, this is Savannah. I can get you registered as a new patient — can I start with your first and last name?",
   "endCallFunctionEnabled": true,
-  "silenceTimeoutSeconds": 20,
+  "silenceTimeoutSeconds": 35,
   "maxDurationSeconds": 900,
   "backgroundSound": "office",
   "model": {

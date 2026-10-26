@@ -4,6 +4,7 @@ One table, `patients`, matching the required US patient minimum demographic
 dataset. Works identically on SQLite (local dev) and PostgreSQL (Supabase in
 production) because we only use portable column types.
 """
+import config  # load .env before reading DATABASE_URL
 import uuid
 from datetime import datetime, timezone
 
@@ -18,8 +19,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./patients.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)
+_connect_args = {"check_same_thread": False, "timeout": 30} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True, hide_parameters=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 

@@ -76,7 +76,12 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   pointer-events:none;max-width:90vw}
 .toast.show{opacity:1}
 .toast.bad{border-left-color:var(--danger)}
-</style></head><body><div class="wrap">
+</style></head><body><div class="wrap"><section aria-label="Staff access" style="margin-bottom:1.5rem">
+<label for="staff-key">Staff access key</label>
+<input id="staff-key" type="password" autocomplete="off" placeholder="ADMIN_API_KEY" style="max-width:350px">
+<button id="unlock" type="button">Unlock workspace</button>
+<button id="lock" type="button">Lock</button>
+<p>Keep this key private. It stays in this tab’s memory. <a href="/staff">Appointments &amp; callback requests ↗</a></p></section>
 
 <header>
   <h1>Registered Patients</h1>
@@ -147,6 +152,12 @@ independently of the voice agent.</p>
 </div>
 
 <script>
+let staffKey = '';
+const originalFetch = window.fetch.bind(window);
+window.fetch = (url, options={}) => originalFetch(url, {...options, headers:{...options.headers, Authorization:'Bearer '+staffKey}});
+document.getElementById('unlock').onclick = () => {staffKey=document.getElementById('staff-key').value;document.getElementById('staff-key').value='';load();};
+document.getElementById('lock').onclick = () => {staffKey='';document.getElementById('rows').replaceChildren();document.getElementById('count').textContent='Locked';};
+
 const $ = id => document.getElementById(id);
 const dlg = $('dlg');
 const FIELDS = ['first_name','last_name','date_of_birth','sex','phone_number',
@@ -204,7 +215,7 @@ async function load(){
       <td>${esc(new Date(r.created_at).toLocaleString())}</td>
       <td style="text-align:right">
         ${r.deleted_at ? '<span class="count">deleted</span>' : `
-          <button class="link" onclick='openForm(${JSON.stringify(r)})'>Edit</button>
+          <button class="link" onclick='openForm(${esc(JSON.stringify(r))})'>Edit</button>
           <button class="link danger" onclick="del('${r.patient_id}')">Delete</button>`}
       </td>
     </tr>`).join('');
@@ -262,7 +273,6 @@ async function del(id){
   load();
 }
 
-load();
 </script></body></html>"""
 
 

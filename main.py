@@ -1,176 +1,158 @@
-"""
-Voice AI Agent — Patient Registration System.
-
-FastAPI backend serving three concerns, deliberately separated:
-  * /patients/*         — REST API over the patient records (api.py)
-  * /webhook            — Vapi tool calls + call event logging (this file)
-  * /chat/completions   — optional custom-LLM proxy (llm.py)
-
-The voice agent and the REST API share ONE service layer (crud.py) and ONE
-validation layer (schemas.py), so a patient registered by phone is validated
-identically to one created over HTTP.
-"""
+"""AI receptionist: original medical intake plus isolated business demos."""
+import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Any
-
-from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+import config  # environment must load before database and routers
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
+from pydantic import ValidationError
 from api import router as patients_router
 from dashboard import router as dashboard_router
 from landing import router as landing_router
+from staff import router as staff_router
 from llm import router as llm_router
+from reception_api import router as reception_router
 from models import init_db
 from tools import TOOL_REGISTRY
+from reception import run_tool
+from security import require_vapi
 
-load_dotenv()
+logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s: %(message)s')
+log = logging.getLogger('voice-agent')
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
-log = logging.getLogger("voice-agent")
+@asynccontextmanager
+async def lifespan(app):
+    if config.setting('APP_ENV') == 'production':
+        if not config.setting('ADMIN_API_KEY') or not config.setting('VAPI_WEBHOOK_SECRET'):
+            raise RuntimeError('Production requires ADMIN_API_KEY and VAPI_WEBHOOK_SECRET.')
+        database_url=config.setting('DATABASE_URL')
+        persistent_sqlite=False
+        if database_url.startswith('sqlite') and config.setting('SQLITE_PERSISTENT').lower()=='true':
+            from pathlib import Path
+            from sqlalchemy.engine import make_url
+            database_path=make_url(database_url).database
+            persistent_sqlite=bool(database_path and database_path!=':memory:' and Path(database_path).is_absolute())
+        if not database_url.startswith(('postgres://','postgresql://','postgresql+')) and not persistent_sqlite:
+            raise RuntimeError('Production requires persistent PostgreSQL DATABASE_URL or explicitly acknowledged SQLite with an absolute path.')
+    init_db()
+    yield
 
-app = FastAPI(
-    title="Voice AI Agent — Patient Registration",
-    description="Conversational patient intake over the phone, backed by a REST API.",
-    version="1.0.0",
-)
+app = FastAPI(title='Reception Studio', version='2.0.0', lifespan=lifespan)
+app.mount('/static', StaticFiles(directory=config.ROOT / 'static'), name='static')
+for router in (landing_router, patients_router, dashboard_router, llm_router, reception_router, staff_router):
+    app.include_router(router)
 
-# Create tables on boot (idempotent).
-init_db()
+@app.middleware('http')
+async def boundaries(request: Request, call_next):
+    if request.method in ('POST','PUT','PATCH'):
+        content = bytearray()
+        async for chunk in request.stream():
+            content.extend(chunk)
+            if len(content) > 65536:
+                return JSONResponse({'error':{'message':'Request too large'}}, status_code=413)
+        request._body = bytes(content)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        # Catch here as well: Starlette's generic error handler re-raises to the
+        # server, which would otherwise print sensitive exception strings.
+        log.error('Request failed: %s', type(exc).__name__)
+        response = JSONResponse(status_code=500, content={'data':None,'error':{'message':'Internal server error'}})
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Permissions-Policy'] = 'microphone=(self "https://*.daily.co"), camera=()'
+    response.headers['Cache-Control'] = 'no-store'
+    # The bundled Vapi SDK uses Daily audio transport; it loads only after a voice click.
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval' https://c.daily.co; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; img-src 'self' data:; media-src 'self' blob: https:; frame-src https://*.daily.co; worker-src 'self' blob: https://c.daily.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    if request.url.path not in ('/', '/hvac', '/medical'):
+        response.headers['Content-Security-Policy'] = response.headers['Content-Security-Policy'].replace(" blob: 'wasm-unsafe-eval' https://c.daily.co", '')
+    if config.setting('APP_ENV') == 'production':
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
 
-app.include_router(landing_router)
-app.include_router(patients_router)
-# Bonus: HTML dashboard at /dashboard. Kept separate so /patients stays pure JSON.
-app.include_router(dashboard_router)
-# Custom-LLM endpoint (/chat/completions) — used only if Vapi is configured
-# with provider "custom-llm"; harmless otherwise.
-app.include_router(llm_router)
-
-
-# --- Consistent error envelope: {"data": null, "error": {...}} -------------
 @app.exception_handler(StarletteHTTPException)
-async def http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"data": None, "error": {"message": exc.detail}},
-    )
-
+async def http_error(request, exc):
+    return JSONResponse(status_code=exc.status_code, content={'data':None,'error':{'message':exc.detail}}, headers=exc.headers)
 
 @app.exception_handler(RequestValidationError)
-async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
-    """422 with field-level detail — the API validates independently of the agent."""
-    return JSONResponse(
-        status_code=422,
-        content={
-            "data": None,
-            "error": {
-                "message": "Validation failed",
-                "fields": [
-                    {"field": ".".join(str(p) for p in e["loc"][1:]), "reason": e["msg"]}
-                    for e in exc.errors()
-                ],
-            },
-        },
-    )
-
+async def validation_error(request, exc):
+    return JSONResponse(status_code=422, content={'data':None,'error':{'message':'Validation failed','fields':[{'field':'.'.join(str(p) for p in e['loc'][1:]),'reason':e['msg']} for e in exc.errors()]}})
 
 @app.exception_handler(Exception)
-async def unhandled_error(_: Request, exc: Exception) -> JSONResponse:
-    log.exception("Unhandled error")
-    return JSONResponse(
-        status_code=500,
-        content={"data": None, "error": {"message": "Internal server error"}},
-    )
+async def unhandled_error(request, exc):
+    # Exception strings/SQL parameters can contain patient information.
+    log.error('Request failed: %s', type(exc).__name__)
+    return JSONResponse(status_code=500, content={'data':None,'error':{'message':'Internal server error'}})
 
+@app.get('/health')
+def health():
+    from sqlalchemy import text
+    from models import engine
+    with engine.connect() as connection:
+        connection.execute(text('SELECT 1'))
+    return {'status':'ok'}
 
-@app.get("/health")
-async def health() -> dict[str, str]:
-    """Railway/uptime probe + quick 'is it live' check before the demo."""
-    return {"status": "ok"}
+@app.post('/webhook', dependencies=[Depends(require_vapi)])
+async def medical_webhook(request: Request):
+    return await webhook(request, 'medical')
 
+@app.post('/webhook/{business_id}', dependencies=[Depends(require_vapi)])
+async def business_webhook(business_id: str, request: Request):
+    from reception import business
+    business(business_id)
+    return await webhook(request, business_id)
 
-@app.post("/webhook")
-async def vapi_webhook(request: Request) -> JSONResponse:
-    """
-    Single Vapi 'Server URL'. Vapi POSTs every event here:
-      - tool-calls / function-call  -> we run the tool and return its result
-      - status-update, end-of-call-report, transcript -> we log them
+async def webhook(request, business_id):
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, 'Invalid JSON') from None
+    if not isinstance(body, dict) or not isinstance(body.get('message', body), dict):
+        raise HTTPException(400, 'Invalid webhook envelope')
+    message = body.get('message', body)
+    if message.get('type') in ('tool-calls','function-call'):
+        return await handle_tool_calls(message, business_id)
+    # Never log transcripts, summaries, caller IDs, phone numbers or tool arguments.
+    return {'received':True}
 
-    Vapi wraps everything in {"message": {...}}.
-    """
-    body = await request.json()
-    message = body.get("message", body)
-    msg_type = message.get("type")
-    log.info("Vapi event: %s", msg_type)
-
-    # --- Tool / function calls -------------------------------------------
-    # Vapi has used both "tool-calls" (new) and "function-call" (legacy).
-    if msg_type in ("tool-calls", "function-call"):
-        return JSONResponse(await handle_tool_calls(message))
-
-    # --- Observability: log the conversation outcome ---------------------
-    if msg_type == "end-of-call-report":
-        log.info(
-            "CALL ENDED | id=%s from=%s reason=%s\nSUMMARY: %s\nTRANSCRIPT:\n%s",
-            (message.get("call") or {}).get("id"),
-            (message.get("customer") or {}).get("number"),
-            message.get("endedReason"),
-            message.get("summary"),
-            message.get("transcript"),
-        )
-
-    return JSONResponse({"received": True})
-
-
-async def handle_tool_calls(message: dict[str, Any]) -> dict[str, Any]:
-    """
-    Run each requested tool and return results in the shape Vapi expects:
-      {"results": [{"toolCallId": "...", "result": "..."}]}
-    """
-    tool_calls = message.get("toolCalls") or message.get("toolCallList") or []
-
-    # Legacy single function-call shape fallback.
-    if not tool_calls and message.get("functionCall"):
-        fc = message["functionCall"]
-        tool_calls = [{"id": "legacy", "function": fc}]
-
+async def handle_tool_calls(message: dict[str, Any], business_id='medical'):
+    calls = message.get('toolCallList') or message.get('toolCalls') or []
+    if not calls and message.get('functionCall'):
+        calls = [{'id':'legacy','function':message['functionCall']}]
+    if not isinstance(calls, list) or len(calls) > 10:
+        raise HTTPException(400, 'Invalid tool call list')
     results = []
-    for call in tool_calls:
-        call_id = call.get("id")
-        fn = call.get("function", {})
-        name = fn.get("name")
-        args = fn.get("arguments", {})
-        if isinstance(args, str):
-            import json
-            try:
+    from starlette.concurrency import run_in_threadpool
+    for call in calls:
+        if not isinstance(call, dict) or not isinstance(call.get('function'), dict) or not isinstance(call.get('id'), str):
+            raise HTTPException(400, 'Invalid tool call')
+        name = call['function'].get('name')
+        args = call['function'].get('arguments', {})
+        try:
+            if isinstance(args, str):
                 args = json.loads(args)
-            except json.JSONDecodeError:
-                args = {}
+            if not isinstance(args, dict):
+                raise ValueError()
+            if business_id == 'medical' and name in TOOL_REGISTRY:
+                result = await run_in_threadpool(TOOL_REGISTRY[name], args.copy())
+            else:
+                result = await run_in_threadpool(run_tool, business_id, name, args)
+            results.append({'toolCallId':call['id'],'result':result if isinstance(result,str) else json.dumps(result)})
+        except HTTPException as exc:
+            results.append({'toolCallId':call['id'],'error':str(exc.detail)})
+        except (ValueError, ValidationError, TypeError, KeyError):
+            results.append({'toolCallId':call['id'],'error':'Invalid arguments. Ask for corrected details.'})
+        except Exception as exc:
+            log.error('Tool failed: %s', type(exc).__name__)
+            results.append({'toolCallId':call['id'],'error':'The action could not be completed. Please try again.'})
+    return {'results':results}
 
-        handler = TOOL_REGISTRY.get(name)
-        if handler is None:
-            log.warning("Unknown tool: %s", name)
-            result = f"Error: no tool named {name}"
-        else:
-            try:
-                result = handler(args)
-            except Exception as exc:  # noqa: BLE001 - never 500 mid-call
-                log.exception("Tool %s failed", name)
-                result = f"Error running {name}: {exc}"
-
-        results.append({"toolCallId": call_id, "result": result})
-
-    return {"results": results}
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     import uvicorn
-
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run('main:app', host='127.0.0.1', port=int(os.getenv('PORT','8000')), access_log=False)

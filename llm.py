@@ -1,92 +1,47 @@
-"""
-Custom-LLM endpoint for Vapi.
-
-When the Vapi assistant's model provider is 'custom-llm', Vapi POSTs an
-OpenAI-format chat-completion request to `<server>/chat/completions` and
-expects an OpenAI-compatible (optionally streaming) response back.
-
-This lets us own the prompt, inject context, log turns, etc. — while still
-using GPT-4o-mini under the hood. Tool CALLS still surface as normal
-OpenAI tool_calls; Vapi then executes them via /webhook (see main.py).
-"""
+"""Authenticated optional medical custom-LLM proxy for Vapi."""
 import json
-import logging
-import os
-
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from config import setting
+from security import require_vapi, rate_limit
 
-log = logging.getLogger("voice-agent.llm")
+router = APIRouter(dependencies=[Depends(require_vapi)])
 
-router = APIRouter()
-
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
-
-# ============================  TASK-SPECIFIC  ==========================
-# Extra system context injected on every turn. At 9 PM, paste the real
-# scenario rules here (or leave the prompt in the Vapi assistant config).
-SYSTEM_PREAMBLE = (
-    "You are a professional, friendly voice assistant for CareCloud. "
-    "Keep replies short and natural for speech. Confirm details before "
-    "taking any action."
-)
-# ======================================================================
-
-
-@router.post("/chat/completions")
+@router.post('/chat/completions')
 async def chat_completions(request: Request):
-    """OpenAI-compatible proxy Vapi calls as its custom LLM."""
+    rate_limit(request, 'llm', 30)
+    key = setting('OPENAI_API_KEY')
+    if not key:
+        raise HTTPException(503, 'AI provider is not configured.')
     body = await request.json()
-    messages = body.get("messages", [])
+    if not isinstance(body, dict) or not isinstance(body.get('messages'), list) or len(body['messages']) > 100:
+        raise HTTPException(422, 'Invalid messages')
+    try:
+        max_tokens = min(max(int(body.get('max_tokens',500)),1),1000)
+    except (TypeError, ValueError):
+        raise HTTPException(422, 'max_tokens must be an integer') from None
+    payload = {'model':setting('LLM_MODEL','gpt-4o-mini'),'messages':[{'role':'system','content':'You are CareCloud Medical’s receptionist. Confirm before writes. Never provide medical advice or reveal patient information to unverified callers.'}] + body['messages'], 'stream':bool(body.get('stream',True)), 'max_tokens':max_tokens}
+    for field in ('tools','tool_choice'):
+        if field in body:
+            payload[field] = body[field]
+    headers = {'Authorization':'Bearer ' + key}
+    if payload['stream']:
+        return StreamingResponse(stream(payload, headers), media_type='text/event-stream')
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post('https://api.openai.com/v1/chat/completions', json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(502, 'AI provider unavailable') from None
 
-    # Inject our system preamble if the caller didn't already lead with one.
-    if not messages or messages[0].get("role") != "system":
-        messages = [{"role": "system", "content": SYSTEM_PREAMBLE}] + messages
-    else:
-        messages[0]["content"] = SYSTEM_PREAMBLE + "\n\n" + messages[0]["content"]
-
-    payload = {
-        "model": MODEL,
-        "messages": messages,
-        "temperature": body.get("temperature", 0.4),
-        "stream": body.get("stream", True),
-    }
-    # Pass through tools/tool_choice if Vapi supplied them.
-    for key in ("tools", "tool_choice", "max_tokens"):
-        if key in body:
-            payload[key] = body[key]
-
-    headers = {
-        "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
-        "Content-Type": "application/json",
-    }
-
-    if payload["stream"]:
-        return StreamingResponse(
-            _stream_openai(payload, headers),
-            media_type="text/event-stream",
-        )
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(OPENAI_URL, json=payload, headers=headers)
-        return resp.json()
-
-
-async def _stream_openai(payload, headers):
-    """Relay OpenAI's SSE stream straight through to Vapi."""
-    async with httpx.AsyncClient(timeout=None) as client:
-        async with client.stream(
-            "POST", OPENAI_URL, json=payload, headers=headers
-        ) as resp:
-            if resp.status_code != 200:
-                text = await resp.aread()
-                log.error("OpenAI error %s: %s", resp.status_code, text)
-                err = {"error": {"message": text.decode(errors="ignore")}}
-                yield f"data: {json.dumps(err)}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-            async for line in resp.aiter_lines():
-                if line:
-                    yield line + "\n"
+async def stream(payload, headers):
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            async with client.stream('POST','https://api.openai.com/v1/chat/completions',json=payload,headers=headers) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    yield line + '\n'
+    except httpx.HTTPError:
+        yield 'data: ' + json.dumps({'error':{'message':'AI provider unavailable'}}) + '\n\ndata: [DONE]\n\n'

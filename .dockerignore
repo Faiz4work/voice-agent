@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+!.env.example
+.venv
+__pycache__
+*.db
+*.db-*
+*.sqlite*
+*.log
+.security-backup
+artifacts
+.pytest_cache
+
+node_modules

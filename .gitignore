@@ -6,3 +6,18 @@ venv/
 .DS_Store
 
 .claude/
+
+# Local data and security artifacts must never enter Git.
+*.db
+*.db-*
+*.sqlite*
+.env.*
+!.env.example
+.pytest_cache/
+test-results/
+playwright-report/
+*.log
+artifacts/
+.security-backup/
+
+node_modules/

@@ -1,7 +1,6 @@
 {
-  "_comment": "Vapi assistant config for the Patient Registration agent. System prompt lives in prompt.md (paste it into model.messages[0].content). Set server.url to <RAILWAY_BASE>/webhook so tool calls reach the backend.",
-  "name": "Savannah — Patient Registration",
-  "firstMessage": "Thanks for calling CareCloud Medical, this is Savannah. I can get you registered as a new patient — can I start with your first and last name?",
+  "name": "Savannah \u2014 Patient Registration",
+  "firstMessage": "Thanks for calling CareCloud Medical, this is Savannah. I can get you registered as a new patient \u2014 can I start with your first and last name?",
   "endCallFunctionEnabled": true,
   "silenceTimeoutSeconds": 35,
   "maxDurationSeconds": 900,
@@ -112,17 +111,27 @@
         "type": "function",
         "function": {
           "name": "lookup_patient",
-          "description": "Check whether a patient already exists for this phone number. Call after collecting the phone number to detect returning callers.",
+          "description": "Verify caller-provided phone, last name and date of birth. Never read patient details before verification.",
           "parameters": {
             "type": "object",
             "properties": {
               "phone_number": {
                 "type": "string",
                 "description": "10-digit US number"
+              },
+              "last_name": {
+                "type": "string",
+                "description": "Caller-provided last name for identity verification"
+              },
+              "date_of_birth": {
+                "type": "string",
+                "description": "Caller-provided DOB, YYYY-MM-DD"
               }
             },
             "required": [
-              "phone_number"
+              "phone_number",
+              "last_name",
+              "date_of_birth"
             ]
           }
         }
@@ -193,10 +202,20 @@
               },
               "emergency_contact_phone": {
                 "type": "string"
+              },
+              "verify_last_name": {
+                "type": "string",
+                "description": "Existing last name, supplied by caller for verification"
+              },
+              "verify_date_of_birth": {
+                "type": "string",
+                "description": "Existing DOB, supplied by caller for verification"
               }
             },
             "required": [
-              "patient_id"
+              "verify_last_name",
+              "patient_id",
+              "verify_date_of_birth"
             ]
           }
         }
@@ -214,6 +233,10 @@
     "numerals": true
   },
   "server": {
-    "url": "https://voice-agent-production-23aa.up.railway.app/webhook"
+    "url": "https://YOUR_BACKEND/webhook",
+    "credentialId": "YOUR_VAPI_CREDENTIAL_ID"
+  },
+  "artifactPlan": {
+    "recordingEnabled": false
   }
 }

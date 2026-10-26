@@ -12,7 +12,9 @@ import crud
 from models import SessionLocal
 from schemas import PatientCreate, PatientOut, PatientUpdate, normalize_phone
 
-router = APIRouter(prefix="/patients", tags=["patients"])
+from security import require_admin
+
+router = APIRouter(prefix="/patients", tags=["patients"], dependencies=[Depends(require_admin)])
 
 
 def get_db():

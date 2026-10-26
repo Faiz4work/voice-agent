@@ -54,8 +54,7 @@ def create_patient(db: Session, data: PatientCreate) -> Patient:
     db.add(patient)
     db.commit()
     db.refresh(patient)
-    log.info("Patient created: %s %s (%s)", patient.first_name, patient.last_name,
-             patient.patient_id)
+    log.info("Patient created")
     return patient
 
 
@@ -66,7 +65,7 @@ def update_patient(db: Session, patient: Patient, data: PatientUpdate) -> Patien
     patient.updated_at = utcnow()
     db.commit()
     db.refresh(patient)
-    log.info("Patient updated: %s (%s)", patient.patient_id, list(changes))
+    log.info("Patient updated")
     return patient
 
 
@@ -75,5 +74,5 @@ def soft_delete_patient(db: Session, patient: Patient) -> Patient:
     patient.deleted_at = utcnow()
     db.commit()
     db.refresh(patient)
-    log.info("Patient soft-deleted: %s", patient.patient_id)
+    log.info("Patient soft-deleted")
     return patient

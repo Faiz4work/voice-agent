@@ -1,99 +1,83 @@
-"""One-shot configuration of the Vapi assistant.
-
-Keeps the assistant definition in version control instead of hand-edited in a
-dashboard: system prompt (prompt.md), tool JSON schemas, voice, transcriber
-and the server URL are all applied from this repo in a single API call.
-
-Usage:
-    set VAPI_API_KEY=...            # PowerShell:  $env:VAPI_API_KEY="..."
-    python configure_assistant.py
-
-Optional overrides:
-    VAPI_ASSISTANT_ID   which assistant to update
-    SERVER_URL          public base URL of this backend
-"""
+"""Preview Vapi assistant configuration; --apply explicitly creates/updates it."""
+import argparse
 import json
-import os
 import re
-import sys
-
+from urllib.parse import urlparse
 import httpx
+from config import ROOT, setting
+from reception import system_prompt, tool_definitions, business
 
-ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "60f2a788-a8e6-4271-bf17-05c03ef34dee")
-SERVER_URL = os.getenv(
-    "SERVER_URL", "https://voice-agent-production-23aa.up.railway.app"
-)
-API = f"https://api.vapi.ai/assistant/{ASSISTANT_ID}"
+def vapi_schema(value):
+    """Vapi requires explicit property types, including nullable fields."""
+    if isinstance(value,list):
+        return [vapi_schema(item) for item in value]
+    if not isinstance(value,dict):
+        return value
+    result={key:vapi_schema(item) for key,item in value.items()}
+    choices=result.get('anyOf')
+    if choices and all(isinstance(item,dict) and isinstance(item.get('type'),str) for item in choices):
+        result.pop('anyOf')
+        result['type']=[item['type'] for item in choices]
+        for choice in choices:
+            if choice.get('type')!='null':
+                for key,item in choice.items():
+                    if key!='type':result.setdefault(key,item)
+    return result
 
-FIRST_MESSAGE = (
-    "Thanks for calling CareCloud Medical, this is Savannah. I can get you "
-    "registered as a new patient — can I start with your first and last name?"
-)
+def build_payload(business_id, server_url, credential_id, model_provider=None):
+    profile=business(business_id)
+    provider=(model_provider or setting('VAPI_HVAC_MODEL_PROVIDER','openai')) if business_id=='hvac' else 'openai'
+    if provider not in {'openai','groq'}:
+        raise ValueError('HVAC model provider must be openai or groq.')
+    model=setting('GROQ_MODEL','openai/gpt-oss-20b') if provider=='groq' else setting('LLM_MODEL','gpt-4o-mini')
+    tools=tool_definitions()
+    prompt=system_prompt(business_id)
+    if business_id=='medical':
+        legacy=json.loads((ROOT/'vapi_assistant.json').read_text(encoding='utf-8'))
+        tools=legacy['model']['tools']+tools
+        md=(ROOT/'prompt.md').read_text(encoding='utf-8')
+        match=re.search(r'```text\r?\n(.*?)```',md,re.S)
+        prompt=(match.group(1) if match else md)+'\n\n'+prompt+'\nPrivacy override: before lookup collect caller-provided last_name and date_of_birth. Before updates pass verify_last_name and verify_date_of_birth. Never read records before verification. This rule takes priority over older instructions.'
+    return {'name':profile['name']+' — Receptionist','firstMessage':legacy['firstMessage'] if business_id=='medical' else profile['greeting'],'model':{'provider':provider,'model':model,'temperature':0.3,'maxTokens':1024 if provider=='groq' else 500,'messages':[{'role':'system','content':prompt}],'tools':vapi_schema(tools)},'voice':{'provider':'vapi','voiceId':setting('VAPI_VOICE_ID','Savannah')},'transcriber':{'provider':'deepgram','model':'nova-2','language':'en','numerals':True},'server':{'url':server_url.rstrip('/')+('/webhook' if business_id=='medical' else '/webhook/'+business_id),'credentialId':credential_id},'serverMessages':['tool-calls','end-of-call-report','status-update'],'artifactPlan':{'recordingEnabled':False},'maxDurationSeconds':900 if business_id=='medical' else 300,'silenceTimeoutSeconds':35,'customerJoinTimeoutSeconds':60,'endCallFunctionEnabled':True}
 
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--business',choices=['hvac','medical'],default='hvac')
+    parser.add_argument('--model-provider',choices=['openai','groq'],default=None,help='HVAC model provider; medical intake retains OpenAI')
+    parser.add_argument('--apply',action='store_true',help='Write to Vapi; default only previews configuration')
+    args=parser.parse_args()
+    base=setting('SERVER_URL','https://YOUR_BACKEND')
+    credential=setting('VAPI_CREDENTIAL_ID','YOUR_VAPI_CREDENTIAL_ID')
+    payload=build_payload(args.business,base,credential,args.model_provider)
+    if not args.apply:
+        print(json.dumps(payload,indent=2))
+        return
+    if not setting('VAPI_API_KEY') or not setting('VAPI_WEBHOOK_SECRET') or 'YOUR_' in base or 'YOUR_' in credential:
+        parser.error('Configure VAPI_API_KEY, VAPI_WEBHOOK_SECRET, VAPI_CREDENTIAL_ID and SERVER_URL first. Create a Vapi Bearer credential with the same webhook secret.')
+    parsed=urlparse(base)
+    if parsed.scheme!='https' or not parsed.hostname:
+        parser.error('SERVER_URL must be a public HTTPS URL accessible to Vapi.')
+    if payload['model']['provider']=='groq' and not setting('GROQ_API_KEY'):
+        parser.error('Set GROQ_API_KEY first. The key is needed for Groq free-tier requests and Vapi provider credentials.')
+    assistant_id=setting('VAPI_HVAC_ASSISTANT_ID' if args.business=='hvac' else 'VAPI_ASSISTANT_ID')
+    # Keep the medical and HVAC assistants separate, including existing IDs.
+    if assistant_id and assistant_id == setting('VAPI_ASSISTANT_ID' if args.business=='hvac' else 'VAPI_HVAC_ASSISTANT_ID'):
+        parser.error('Medical and HVAC must use different assistant IDs.')
+    headers={'Authorization':'Bearer '+setting('VAPI_API_KEY')}
+    try:
+        with httpx.Client(timeout=30) as client:
+            if payload['model']['provider']=='groq':
+                listing=client.get('https://api.vapi.ai/credential',headers=headers)
+                listing.raise_for_status()
+                credentials=listing.json()
+                if not any(item.get('provider')=='groq' for item in credentials):
+                    provider_key=client.post('https://api.vapi.ai/credential',headers=headers,json={'provider':'groq','apiKey':setting('GROQ_API_KEY'),'name':'Reception Studio Groq'})
+                    provider_key.raise_for_status()
+            response=client.patch('https://api.vapi.ai/assistant/'+assistant_id,json=payload,headers=headers) if assistant_id else client.post('https://api.vapi.ai/assistant',json=payload,headers=headers)
+            response.raise_for_status()
+            print('Configured',args.business,'assistant:',response.json()['id'])
+    except httpx.HTTPError:
+        raise SystemExit('Vapi configuration failed. Check credentials and the Vapi dashboard. Provider response omitted to protect secrets.') from None
 
-def load_system_prompt() -> str:
-    """Pull the prompt out of the ```text fenced block in prompt.md."""
-    md = open("prompt.md", encoding="utf-8").read()
-    match = re.search(r"```text\n(.*?)```", md, re.DOTALL)
-    if not match:
-        sys.exit("Could not find the ```text block in prompt.md")
-    return match.group(1).strip()
-
-
-def load_tools() -> list[dict]:
-    """Reuse the tool schemas already defined in vapi_assistant.json."""
-    cfg = json.load(open("vapi_assistant.json", encoding="utf-8"))
-    return cfg["model"]["tools"]
-
-
-def main() -> None:
-    key = os.getenv("VAPI_API_KEY")
-    if not key:
-        sys.exit("Set VAPI_API_KEY first (Vapi dashboard > Settings > API Keys).")
-
-    payload = {
-        "name": "Savannah — Patient Registration",
-        "firstMessage": FIRST_MESSAGE,
-        "model": {
-            "provider": "openai",
-            "model": "gpt-4o-mini",
-            "temperature": 0.5,
-            "messages": [{"role": "system", "content": load_system_prompt()}],
-            "tools": load_tools(),
-        },
-        "voice": {"provider": "vapi", "voiceId": "Savannah"},
-        "transcriber": {
-            "provider": "deepgram",
-            "model": "nova-2",
-            "language": "en",
-            "numerals": True,
-        },
-        "server": {"url": f"{SERVER_URL}/webhook"},
-        "serverMessages": ["tool-calls", "end-of-call-report", "status-update"],
-        "silenceTimeoutSeconds": 35,
-        "maxDurationSeconds": 900,
-        "endCallFunctionEnabled": True,
-    }
-
-    resp = httpx.patch(
-        API,
-        json=payload,
-        headers={"Authorization": f"Bearer {key}"},
-        timeout=30,
-    )
-    if resp.status_code >= 300:
-        print(f"FAILED {resp.status_code}:\n{resp.text}")
-        sys.exit(1)
-
-    data = resp.json()
-    tools = data.get("model", {}).get("tools", [])
-    print("Assistant configured.")
-    print("  name       :", data.get("name"))
-    print("  model      :", data.get("model", {}).get("model"))
-    print("  server url :", (data.get("server") or {}).get("url"))
-    print("  tools      :", [t["function"]["name"] for t in tools])
-    print("  prompt     :", len(load_system_prompt()), "chars")
-
-
-if __name__ == "__main__":
+if __name__=='__main__':
     main()

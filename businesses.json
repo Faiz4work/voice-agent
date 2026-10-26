@@ -1,0 +1,117 @@
+{
+  "hvac": {
+    "name": "ComfortWorks HVAC",
+    "industry": "Heating & cooling",
+    "demo": true,
+    "tagline": "A warmer welcome. A cooler way to book.",
+    "timezone": "America/Chicago",
+    "description": "Fictional HVAC demonstration. Replace this profile with the approved HVAC package before representing a real business.",
+    "hours": {
+      "0": [
+        "08:00",
+        "17:00"
+      ],
+      "1": [
+        "08:00",
+        "17:00"
+      ],
+      "2": [
+        "08:00",
+        "17:00"
+      ],
+      "3": [
+        "08:00",
+        "17:00"
+      ],
+      "4": [
+        "08:00",
+        "17:00"
+      ],
+      "5": [
+        "09:00",
+        "13:00"
+      ]
+    },
+    "slot_minutes": 60,
+    "booking_days": 30,
+    "service_area": "Demo service area: Austin, Texas",
+    "services": [
+      {
+        "id": "ac-repair",
+        "name": "AC repair",
+        "description": "Diagnostic visit for cooling problems."
+      },
+      {
+        "id": "heating",
+        "name": "Heating service",
+        "description": "Furnace and heating inspection."
+      },
+      {
+        "id": "maintenance",
+        "name": "Seasonal tune-up",
+        "description": "Preventive heating and cooling maintenance."
+      }
+    ],
+    "faqs": {
+      "pricing": "A technician provides a quote after diagnosis. The demo does not promise repair prices.",
+      "hours": "Monday\u2013Friday 8am\u20135pm and Saturday 9am\u20131pm, America/Chicago. Closed Sunday.",
+      "emergency": "This demo does not dispatch emergency services. If you smell gas or face immediate danger, leave the area and contact local emergency services.",
+      "coverage": "The fictional demo serves Austin, Texas. Service area must be confirmed with the business.",
+      "cancellation": "Contact the business to change a visit. This demo supports staff-managed cancellation."
+    },
+    "greeting": "Hi, I\u2019m Alex, the ComfortWorks demo receptionist. How can I help with your heating or cooling today?"
+  },
+  "medical": {
+    "name": "CareCloud Medical",
+    "industry": "Patient registration",
+    "demo": true,
+    "tagline": "Thoughtful care starts with a conversation.",
+    "timezone": "America/Chicago",
+    "description": "CareCloud demonstration. The original patient registration tools remain available only through the authenticated medical webhook and staff APIs. Public chat handles general inquiries and demo appointments only. Do not collect medical histories, diagnoses, insurance or dates of birth in public chat.",
+    "hours": {
+      "0": [
+        "09:00",
+        "17:00"
+      ],
+      "1": [
+        "09:00",
+        "17:00"
+      ],
+      "2": [
+        "09:00",
+        "17:00"
+      ],
+      "3": [
+        "09:00",
+        "17:00"
+      ],
+      "4": [
+        "09:00",
+        "17:00"
+      ]
+    },
+    "slot_minutes": 60,
+    "booking_days": 30,
+    "service_area": "Demo clinic; confirm location with staff.",
+    "services": [
+      {
+        "id": "consultation",
+        "name": "New patient consultation",
+        "description": "A demonstration scheduling slot, not a clinical consultation."
+      },
+      {
+        "id": "follow-up",
+        "name": "Follow-up appointment",
+        "description": "A demonstration follow-up slot."
+      }
+    ],
+    "faqs": {
+      "pricing": "Please contact clinic staff for fees and insurance coverage. No prices or coverage are guaranteed.",
+      "hours": "Demo scheduling: Monday\u2013Friday 9am\u20135pm, America/Chicago.",
+      "emergency": "This assistant cannot provide medical advice or emergency care. For immediate danger, contact local emergency services.",
+      "registration": "Patient registration remains available through the private medical voice assistant or clinic staff. Public chat does not access patient records.",
+      "cancellation": "Clinic staff can help change or cancel an appointment."
+    },
+    "greeting": "Hi, I\u2019m Savannah, the CareCloud demo receptionist. I can help with general clinic questions and demo appointments."
+  }
+}

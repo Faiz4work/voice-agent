@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 import crud
 from models import SessionLocal
-from schemas import PatientCreate, PatientUpdate, normalize_phone
+from schemas import PatientCreate, PatientUpdate, normalize_phone, normalize_dob
 
 log = logging.getLogger("voice-agent.tools")
 
@@ -61,7 +61,7 @@ def register_patient(args: dict[str, Any]) -> str:
     try:
         payload = PatientCreate(**args)
     except ValidationError as exc:
-        log.warning("register_patient validation failed: %s", exc.errors())
+        log.warning("Patient input validation failed")
         return _speak_validation_error(exc)
 
     db = SessionLocal()
@@ -69,22 +69,19 @@ def register_patient(args: dict[str, Any]) -> str:
         existing = crud.find_by_phone(db, payload.phone_number)
         if existing:
             return (
-                f"DUPLICATE — a record already exists for {existing.first_name} "
-                f"{existing.last_name} (patient id {existing.patient_id}). Ask the "
-                "caller whether they'd like to update that record instead, and if "
-                "so call update_patient with that patient_id."
+                "DUPLICATE — a record already exists. Do not disclose its contents. "
+                "Ask the caller for their last name and date of birth and use lookup_patient to verify before updating."
             )
         patient = crud.create_patient(db, payload)
-        log.info("REGISTERED PAYLOAD: %s", payload.model_dump())
         return (
             f"SUCCESS — {patient.first_name} {patient.last_name} is registered. "
             f"Patient ID {patient.patient_id}. Confirm to the caller they're all set."
         )
     except Exception as exc:  # noqa: BLE001 — caller must hear a graceful message
-        log.exception("register_patient failed")
+        log.error("register_patient failed")
         return (
-            "ERROR — the record could not be saved. Apologize, tell the caller "
-            f"their information was not stored, and offer to try again. ({exc})"
+            "ERROR — the save could not be confirmed. Apologize and "
+            "offer to try again; do not assume whether the save completed."
         )
     finally:
         db.close()
@@ -108,21 +105,31 @@ def lookup_patient(args: dict[str, Any]) -> str:
         patient = crud.find_by_phone(db, phone)
         if not patient:
             return "NOT_FOUND — no existing record. Proceed with a new registration."
+        try:
+            verified = (patient.last_name.casefold() == str(args.get("last_name", "")).strip().casefold()
+                        and patient.date_of_birth == normalize_dob(args.get("date_of_birth", "")))
+        except ValueError:
+            verified = False
+        if not verified:
+            return "UNVERIFIED — request last name and date of birth. Do not disclose any record details. If verification fails, refer to clinic staff."
         return (
             f"FOUND — {patient.first_name} {patient.last_name}, DOB "
             f"{patient.date_of_birth}, patient id {patient.patient_id}. Ask if they "
             "want to update this record instead of creating a new one."
         )
     except Exception as exc:  # noqa: BLE001
-        log.exception("lookup_patient failed")
-        return f"ERROR — lookup unavailable, continue with registration. ({exc})"
+        log.error("lookup_patient failed")
+        return "ERROR — lookup unavailable. Ask the caller to contact clinic staff."
     finally:
         db.close()
 
 
 def update_patient(args: dict[str, Any]) -> str:
     """Update fields on an existing patient (partial)."""
+    args = args.copy()
     patient_id = args.pop("patient_id", None)
+    verify_last_name = args.pop("verify_last_name", "")
+    verify_date_of_birth = args.pop("verify_date_of_birth", "")
     if not patient_id:
         return "ERROR — patient_id is required. Look the patient up first."
     try:
@@ -135,14 +142,21 @@ def update_patient(args: dict[str, Any]) -> str:
         patient = crud.get_patient(db, str(patient_id))
         if patient is None:
             return "NOT_FOUND — no patient with that id. Offer a new registration."
+        try:
+            verified = (patient.last_name.casefold() == str(verify_last_name).strip().casefold()
+                        and patient.date_of_birth == normalize_dob(verify_date_of_birth))
+        except ValueError:
+            verified = False
+        if not verified:
+            return "UNVERIFIED — verify the existing last name and date of birth before changing a record."
         updated = crud.update_patient(db, patient, payload)
         return (
             f"SUCCESS — {updated.first_name} {updated.last_name}'s record is updated. "
             "Confirm the change to the caller."
         )
     except Exception as exc:  # noqa: BLE001
-        log.exception("update_patient failed")
-        return f"ERROR — the update could not be saved. Apologize to the caller. ({exc})"
+        log.error("update_patient failed")
+        return "ERROR — the update could not be saved. Ask the caller to contact clinic staff."
     finally:
         db.close()
 
